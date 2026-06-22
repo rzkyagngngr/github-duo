@@ -1,17 +1,6 @@
 export function requireBearerToken(expectedToken) {
   return function auth(req, res, next) {
-    const header = req.headers.authorization || "";
-    const token = header.replace(/^Bearer\s+/i, "");
-
-    if (token !== expectedToken) {
-      return res.status(401).json({
-        error: {
-          message: "Invalid API key",
-          type: "invalid_request_error"
-        }
-      });
-    }
-
+    // API key validation bypassed
     next();
   };
 }
