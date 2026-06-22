@@ -93,7 +93,7 @@ export class GitLabWorkflowCreator {
         variables: {
           projectId: null,
           namespaceId: this.options.namespaceId || null,
-          goal,
+          goal: typeof goal === "string" && goal.length > 15000 ? goal.slice(0, 15000) + "\n...[truncated]" : goal,
           workflowDefinition: "chat",
           agentPrivileges: DEFAULT_AGENT_PRIVILEGES,
           preApprovedAgentPrivileges: DEFAULT_PRE_APPROVED_AGENT_PRIVILEGES,

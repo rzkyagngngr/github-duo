@@ -206,7 +206,8 @@ export class GitLabDuoClient {
       console.error("[gitlab-duo:graphql] Sending message via aiAction...");
     }
 
-    const { requestId } = await creator.sendChatMessage({ content: goalContent });
+    const chatContent = typeof goalContent === "string" && goalContent.length > 15000 ? goalContent.slice(0, 15000) + "\n...[truncated]" : goalContent;
+    const { requestId } = await creator.sendChatMessage({ content: chatContent });
 
     if (this.options.debugFrames) {
       console.error("[gitlab-duo:graphql:aiAction] requestId:", requestId);
@@ -386,9 +387,9 @@ export class GitLabDuoClient {
 
     const ws = await this.openSocket(wsUrl, headers);
 
-    // Send startRequest frame to trigger agent execution
+    const wsGoal = typeof goalContent === "string" && goalContent.length > 15000 ? goalContent.slice(0, 15000) + "\n...[truncated]" : goalContent;
     const startFrames = protocol.buildStartFrames({
-      prompt: goalContent,
+      prompt: wsGoal,
       messages,
       conversationId: created.numericId,
     });
