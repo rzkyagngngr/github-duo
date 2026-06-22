@@ -40,17 +40,114 @@ export function normalizeContent(content) {
     .join("\n");
 }
 
-export function modelList(modelId) {
+export const AVAILABLE_MODELS = [
+  // Anthropic
+  { id: "claude_haiku_4_5_20251001", provider: "Anthropic" },
+  { id: "claude_haiku_4_5_20251001_bedrock", provider: "Bedrock" },
+  { id: "claude_haiku_4_5_20251001_vertex", provider: "Gemini Enterprise Agent Platform" },
+  { id: "claude_sonnet_4_5_20250929", provider: "Anthropic" },
+  { id: "claude_sonnet_4_5_20250929_vertex", provider: "Gemini Enterprise Agent Platform" },
+  { id: "claude_sonnet_4_5_20250929_bedrock", provider: "Bedrock" },
+  { id: "claude_sonnet_4_6", provider: "Anthropic" },
+  { id: "claude_sonnet_4_6_bedrock", provider: "Bedrock" },
+  { id: "claude_opus_4_5_20251101", provider: "Anthropic" },
+  { id: "claude_opus_4_5_20251101_vertex", provider: "Gemini Enterprise Agent Platform" },
+  { id: "claude_opus_4_6_20260205", provider: "Anthropic" },
+  { id: "claude_opus_4_6_vertex", provider: "Gemini Enterprise Agent Platform" },
+  { id: "claude_opus_4_6_bedrock", provider: "Bedrock" },
+  { id: "claude_opus_4_7", provider: "Anthropic" },
+  { id: "claude_opus_4_7_vertex", provider: "Gemini Enterprise Agent Platform" },
+  { id: "claude_opus_4_7_bedrock", provider: "Bedrock" },
+  { id: "claude_opus_4_8", provider: "Anthropic" },
+  { id: "claude_opus_4_8_vertex", provider: "Gemini Enterprise Agent Platform" },
+  { id: "claude_opus_4_8_bedrock", provider: "Bedrock" },
+  // Gemini
+  { id: "gemini_3_5_flash_vertex", provider: "Gemini Enterprise Agent Platform" },
+  // OpenAI / GPT-5
+  { id: "gpt_5", provider: "OpenAI" },
+  { id: "gpt_5_codex", provider: "OpenAI" },
+  { id: "gpt_5_2_codex", provider: "OpenAI" },
+  { id: "gpt_5_3_codex", provider: "OpenAI" },
+  { id: "gpt_5_mini", provider: "OpenAI" },
+  { id: "gpt_5_2", provider: "OpenAI" },
+  { id: "gpt_5_4", provider: "OpenAI" },
+  { id: "gpt_5_4_mini", provider: "OpenAI" },
+  { id: "gpt_5_4_nano", provider: "OpenAI" },
+  { id: "gpt_5_5", provider: "OpenAI" }
+];
+
+export function resolveGitLabModel(modelIdInput, defaultModelId) {
+  if (!modelIdInput) return defaultModelId;
+  
+  const norm = modelIdInput.toLowerCase().trim();
+  
+  // Direct match
+  const directMatch = AVAILABLE_MODELS.find(m => m.id.toLowerCase() === norm);
+  if (directMatch) return directMatch.id;
+  
+  // Alias mapping
+  if (norm.includes("sonnet")) {
+    if (norm.includes("4.5") || norm.includes("4-5") || norm.includes("4_5") || norm.includes("3.5") || norm.includes("3-5")) {
+      // Treat Sonnet 3.5 / 4.5 as 4.5 or 4.6 depending on availability. Sonnet 4.6 is latest.
+      if (norm.includes("4.5") || norm.includes("4-5") || norm.includes("4_5")) {
+        return "claude_sonnet_4_5_20250929_bedrock";
+      }
+    }
+    return "claude_sonnet_4_6_bedrock";
+  }
+  if (norm.includes("opus")) {
+    if (norm.includes("4.5") || norm.includes("4-5") || norm.includes("4_5")) {
+      return "claude_opus_4_5_20251101";
+    }
+    if (norm.includes("4.6") || norm.includes("4-6") || norm.includes("4_6")) {
+      return "claude_opus_4_6_bedrock";
+    }
+    if (norm.includes("4.7") || norm.includes("4-7") || norm.includes("4_7")) {
+      return "claude_opus_4_7_bedrock";
+    }
+    return "claude_opus_4_8_bedrock";
+  }
+  if (norm.includes("haiku")) {
+    return "claude_haiku_4_5_20251001_bedrock";
+  }
+  if (norm.includes("flash") || norm.includes("gemini")) {
+    return "gemini_3_5_flash_vertex";
+  }
+  if (norm.includes("gpt-5.5") || norm.includes("gpt-5-5")) {
+    return "gpt_5_5";
+  }
+  if (norm.includes("gpt-5.4") || norm.includes("gpt-5-4")) {
+    return "gpt_5_4";
+  }
+  if (norm.includes("gpt-5") || norm.includes("gpt5")) {
+    if (norm.includes("mini")) return "gpt_5_mini";
+    if (norm.includes("codex")) return "gpt_5_codex";
+    return "gpt_5_2";
+  }
+  
+  return defaultModelId;
+}
+
+export function modelList(defaultModelId) {
+  const list = AVAILABLE_MODELS.map(m => ({
+    id: m.id,
+    object: "model",
+    created: Math.floor(Date.now() / 1000),
+    owned_by: "gitlab-duo-adapter"
+  }));
+  
+  if (defaultModelId && !AVAILABLE_MODELS.some(m => m.id === defaultModelId)) {
+    list.unshift({
+      id: defaultModelId,
+      object: "model",
+      created: Math.floor(Date.now() / 1000),
+      owned_by: "gitlab-duo-adapter"
+    });
+  }
+  
   return {
     object: "list",
-    data: [
-      {
-        id: modelId,
-        object: "model",
-        created: Math.floor(Date.now() / 1000),
-        owned_by: "gitlab-duo-adapter"
-      }
-    ]
+    data: list
   };
 }
 

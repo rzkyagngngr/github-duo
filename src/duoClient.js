@@ -405,12 +405,28 @@ export class GitLabDuoClient {
     const template = this.options.wsUrl || this.options.wsTemplate;
     if (!template) return { wsUrl: "", headers: this.options.headers || {} };
 
-    const wsUrl = template.includes("{{workflow_id}}")
+    let wsUrl = template.includes("{{workflow_id}}")
       ? template.replace(
           "{{workflow_id}}",
           encodeURIComponent(created.numericId),
         )
       : template;
+
+    try {
+      const urlObj = new URL(wsUrl);
+      const targetModel = created.modelIdentifier || this.options.modelIdentifier;
+      if (targetModel) {
+        urlObj.searchParams.set("user_selected_model_identifier", targetModel);
+        if (this.options.debugFrames) {
+          console.error("[gitlab-duo:ws:model] Using model:", targetModel);
+        }
+      }
+      wsUrl = urlObj.toString();
+    } catch (err) {
+      if (this.options.debugFrames) {
+        console.error("[gitlab-duo:ws:model:error] Failed to set model in wsUrl:", err.message);
+      }
+    }
 
     return { wsUrl, headers: this.options.headers || {} };
   }

@@ -19,6 +19,7 @@ import {
   writeSseDone,
   openApiSpec,
   normalizeContent,
+  resolveGitLabModel,
 } from "./src/openai.js";
 
 const app = express();
@@ -182,11 +183,11 @@ app.get(["/v1", "/v1/"], (_req, res) => {
 });
 
 app.get("/v1/models", auth, async (_req, res) => {
-  res.json(modelList(config.modelId));
+  res.json(modelList(runtimeGitLabConfig.modelIdentifier || config.modelId));
 });
 
 app.post("/v1/chat/completions", auth, async (req, res) => {
-  const { model = config.modelId, messages = [], stream = false } = req.body;
+  const { model = runtimeGitLabConfig.modelIdentifier || config.modelId, messages = [], stream = false } = req.body;
   const prompt = messagesToPrompt(messages);
 
   if (!runtimeGitLabConfig.graphql?.graphqlUrl) {
@@ -222,8 +223,11 @@ app.post("/v1/chat/completions", auth, async (req, res) => {
     activeWorkflowId = runtimeGitLabConfig.workflows[conversationKey];
   }
 
+  const resolvedModelId = resolveGitLabModel(model, runtimeGitLabConfig.modelIdentifier || config.modelId);
+
   const duo = new GitLabDuoClient({
     ...runtimeGitLabConfig,
+    modelIdentifier: resolvedModelId,
     graphql: {
       ...runtimeGitLabConfig.graphql,
       workflowId: activeWorkflowId || "",
