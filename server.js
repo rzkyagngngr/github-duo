@@ -18,6 +18,7 @@ import {
   writeSse,
   writeSseDone,
   openApiSpec,
+  normalizeContent,
 } from "./src/openai.js";
 
 const app = express();
@@ -208,7 +209,8 @@ app.post("/v1/chat/completions", auth, async (req, res) => {
   }
 
   const hasAssistantMessage = messages.some(m => m.role === "assistant" || m.role === "agent");
-  const firstUserMsg = messages.find(m => m.role === "user")?.content || "";
+  const firstUserMsgRaw = messages.find(m => m.role === "user")?.content || "";
+  const firstUserMsg = normalizeContent(firstUserMsgRaw);
   const conversationKey = firstUserMsg ? crypto.createHash("sha256").update(firstUserMsg).digest("hex") : null;
 
   if (!runtimeGitLabConfig.workflows) {

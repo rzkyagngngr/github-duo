@@ -69,7 +69,8 @@ export class GitLabDuoClient {
     const creator = new GitLabWorkflowCreator(this.options.graphql);
 
     const hasAssistantMessage = messages?.some(m => m.role === "assistant" || m.role === "agent");
-    const lastUserMsg = messages?.filter(m => m.role === "user").at(-1)?.content || prompt;
+    const lastUserMsgRaw = messages?.filter(m => m.role === "user").at(-1)?.content || prompt;
+    const lastUserMsg = normalizeContent(lastUserMsgRaw);
 
     let created;
     if (messages && hasAssistantMessage && this.options.graphql?.workflowId) {
@@ -241,7 +242,8 @@ export class GitLabDuoClient {
     const creator = new GitLabWorkflowCreator(this.options.graphql);
 
     // Extract last user message as the current goal
-    const lastUserMsg = messages?.filter(m => m.role === "user").at(-1)?.content || prompt;
+    const lastUserMsgRaw = messages?.filter(m => m.role === "user").at(-1)?.content || prompt;
+    const lastUserMsg = normalizeContent(lastUserMsgRaw);
 
     const hasAssistantMessage = messages?.some(m => m.role === "assistant" || m.role === "agent");
     let created;
@@ -565,4 +567,17 @@ function tryClose(ws) {
   } catch {
     // Ignore close races.
   }
+}
+
+function normalizeContent(content) {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return JSON.stringify(content ?? "");
+  return content
+    .map((part) => {
+      if (typeof part === "string") return part;
+      if (part?.type === "text") return part.text || "";
+      return JSON.stringify(part);
+    })
+    .filter(Boolean)
+    .join("\n");
 }
