@@ -1,0 +1,7 @@
+node_modules/
+runtime-config.json
+*.har
+.git/
+.env
+.idea/
+.vscode/
