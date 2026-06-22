@@ -5,14 +5,32 @@ export function requireBearerToken(expectedToken) {
   };
 }
 
+const TOOL_SYSTEM_INSTRUCTION = `SYSTEM INSTRUCTION:
+You have access to the following local tools to read files and inspect the user's workspace/codebase:
+1. "view_file" (arguments: { "path": string }) - Reads the full text content of a file on the user's disk.
+2. "list_dir" (arguments: { "path": string }) - Lists the contents of a directory on the user's disk.
+
+To call a tool, you MUST output ONLY a JSON block wrapped in \`\`\`tool_call markdown tags. Example:
+\`\`\`tool_call
+{
+  "name": "view_file",
+  "arguments": {
+    "path": "src/index.js"
+  }
+}
+\`\`\`
+Do NOT include any introduction, conversational text, or other characters. Write ONLY the tool call block. Once you receive the tool result, you will be given the file/directory contents and you can then continue your final answer. If you don't need any local files, respond normally.`;
+
 export function messagesToPrompt(messages = []) {
-  return messages
+  const formatted = messages
     .map((message) => {
       const role = message.role || "user";
       const content = normalizeContent(message.content);
       return `${role.toUpperCase()}: ${content}`;
     })
     .join("\n\n");
+
+  return `${TOOL_SYSTEM_INSTRUCTION}\n\n${formatted}`;
 }
 
 export function normalizeContent(content) {

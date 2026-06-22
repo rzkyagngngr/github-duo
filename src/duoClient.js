@@ -2,6 +2,8 @@ import WebSocket from "ws";
 import { DuoProtocol } from "./duoProtocol.js";
 import { GitLabCheckpointClient } from "./checkpointClient.js";
 import { GitLabWorkflowCreator } from "./workflowCreator.js";
+import { executeLocalTool } from "./localTools.js";
+import { messagesToPrompt } from "./openai.js";
 
 export class GitLabDuoClient {
   constructor(options) {
@@ -15,48 +17,136 @@ export class GitLabDuoClient {
       );
     }
 
-    const errors = [];
+    let activeMessages = [...messages];
+    let activePrompt = prompt;
 
-    // Primary strategy: WebSocket approach (if wsUrl configured)
-    if (this.options.wsUrl || this.options.wsTemplate) {
-      try {
-        let yielded = false;
-        const baselineCheckpointContent = await this.tryReadCheckpointFallback();
-        for await (const delta of this.streamAttempt({
-          prompt,
-          messages,
-          baselineCheckpointContent,
-        })) {
-          yielded = true;
-          yield delta;
-        }
-        if (yielded) return;
-      } catch (err) {
-        errors.push(`WebSocket: ${err.message}`);
-        if (this.options.debugFrames) {
-          console.error("[gitlab-duo:ws:error]", err.message);
-          if (err.cause) console.error("[gitlab-duo:ws:cause]", err.cause?.message ?? String(err.cause));
-        }
-      }
-    }
-
-    // Fallback strategy: GraphQL workflow + aiAction + checkpoint polling
-    try {
+    while (true) {
+      const errors = [];
       let yielded = false;
-      for await (const delta of this.streamViaGraphQL({ prompt, messages })) {
-        yielded = true;
-        yield delta;
-      }
-      if (yielded) return;
-    } catch (err) {
-      errors.push(`GraphQL: ${err.message}`);
-      if (this.options.debugFrames) {
-        console.error("[gitlab-duo:graphql:error]", err.message);
-        if (err.cause) console.error("[gitlab-duo:graphql:cause]", err.cause?.message ?? String(err.cause));
-      }
-    }
+      let fullText = "";
+      let isInterceptingTool = false;
+      let toolCallBuffer = "";
 
-    throw new Error(`GitLab Duo stream failed. ${errors.join(" | ")}`);
+      const processChunk = (chunk) => {
+        fullText += chunk;
+
+        if (isInterceptingTool) {
+          toolCallBuffer += chunk;
+          return null;
+        } else {
+          const index = fullText.indexOf("```tool_call");
+          if (index !== -1) {
+            isInterceptingTool = true;
+            const chunkIndex = chunk.indexOf("```tool_call");
+            const prefix = chunkIndex !== -1 ? chunk.slice(0, chunkIndex) : "";
+            toolCallBuffer = fullText.slice(index);
+            return prefix;
+          }
+          return chunk;
+        }
+      };
+
+      // Primary strategy: WebSocket approach (if wsUrl configured)
+      if (this.options.wsUrl || this.options.wsTemplate) {
+        try {
+          const baselineCheckpointContent = await this.tryReadCheckpointFallback();
+          const generator = this.streamAttempt({
+            prompt: activePrompt,
+            messages: activeMessages,
+            baselineCheckpointContent,
+          });
+
+          for await (const chunk of generator) {
+            const out = processChunk(chunk);
+            if (out) {
+              yield out;
+              yielded = true;
+            }
+          }
+        } catch (err) {
+          errors.push(`WebSocket: ${err.message}`);
+          if (this.options.debugFrames) {
+            console.error("[gitlab-duo:ws:error]", err.message);
+            if (err.cause) console.error("[gitlab-duo:ws:cause]", err.cause?.message ?? String(err.cause));
+          }
+        }
+      }
+
+      // Fallback strategy: GraphQL workflow + aiAction + checkpoint polling
+      if (!yielded) {
+        try {
+          const generator = this.streamViaGraphQL({
+            prompt: activePrompt,
+            messages: activeMessages,
+          });
+
+          for await (const chunk of generator) {
+            const out = processChunk(chunk);
+            if (out) {
+              yield out;
+              yielded = true;
+            }
+          }
+        } catch (err) {
+          errors.push(`GraphQL: ${err.message}`);
+          if (this.options.debugFrames) {
+            console.error("[gitlab-duo:graphql:error]", err.message);
+            if (err.cause) console.error("[gitlab-duo:graphql:cause]", err.cause?.message ?? String(err.cause));
+          }
+        }
+      }
+
+      if (!yielded && errors.length > 0) {
+        throw new Error(`GitLab Duo stream failed. ${errors.join(" | ")}`);
+      }
+
+      // Intercept local tools
+      if (isInterceptingTool && toolCallBuffer.includes("```tool_call")) {
+        let jsonText = "";
+        const match = toolCallBuffer.match(/```tool_call\s*([\s\S]*?)\s*(?:```|$)/);
+        if (match) {
+          jsonText = match[1].trim();
+        }
+
+        let parsedTool = null;
+        try {
+          parsedTool = JSON.parse(jsonText);
+        } catch (e) {
+          const rawJsonMatch = jsonText.match(/\{[\s\S]*\}/);
+          if (rawJsonMatch) {
+            try {
+              parsedTool = JSON.parse(rawJsonMatch[0]);
+            } catch {}
+          }
+        }
+
+        if (parsedTool && parsedTool.name) {
+          const toolResult = executeLocalTool(parsedTool.name, parsedTool.arguments || {});
+
+          // Clear workflowId from config if it was previously set, so we can send a new turn correctly
+          // (Or let it reuse if context-retention logic supports it)
+          activeMessages.push({
+            role: "assistant",
+            content: toolCallBuffer.trim()
+          });
+
+          activeMessages.push({
+            role: "user",
+            content: `TOOL_RESULT: ${toolResult}`
+          });
+
+          activePrompt = messagesToPrompt(activeMessages);
+
+          if (this.options.debugFrames) {
+            console.error(`[local-tools] Executed tool ${parsedTool.name}. Appending result and continuing streamChat...`);
+          }
+
+          continue;
+        }
+      }
+
+      break;
+    }
   }
 
   /**
