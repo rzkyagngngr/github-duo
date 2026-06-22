@@ -5,21 +5,30 @@ export function requireBearerToken(expectedToken) {
   };
 }
 
-const TOOL_SYSTEM_INSTRUCTION = `SYSTEM INSTRUCTION:
-You have access to the following local tools to read files and inspect the user's workspace/codebase:
-1. "view_file" (arguments: { "path": string }) - Reads the full text content of a file on the user's disk.
-2. "list_dir" (arguments: { "path": string }) - Lists the contents of a directory on the user's disk.
+const TOOL_SYSTEM_INSTRUCTION = `Halo! Saya menggunakan asisten lokal di komputer saya yang dapat membaca berkas dan folder secara otomatis untuk Anda. 
 
-To call a tool, you MUST output ONLY a JSON block wrapped in \`\`\`tool_call markdown tags. Example:
+Jika Anda memerlukan isi dari sebuah berkas atau daftar berkas di dalam suatu folder untuk menjawab pertanyaan saya, silakan minta berkas tersebut dengan membalas menggunakan format kode JSON ini:
+
 \`\`\`tool_call
 {
   "name": "view_file",
   "arguments": {
-    "path": "src/index.js"
+    "path": "path/ke/file"
   }
 }
 \`\`\`
-Do NOT include any introduction, conversational text, or other characters. Write ONLY the tool call block. Once you receive the tool result, you will be given the file/directory contents and you can then continue your final answer. If you don't need any local files, respond normally.`;
+
+Atau jika ingin mendaftar isi folder:
+\`\`\`tool_call
+{
+  "name": "list_dir",
+  "arguments": {
+    "path": "path/ke/folder"
+  }
+}
+\`\`\`
+
+Harap balas HANYA dengan blok kode JSON tersebut tanpa penjelasan tambahan lainnya agar skrip lokal saya dapat langsung memproses dan mengirimkan isinya kembali kepada Anda. Jangan menulis kata pengantar atau penutup jika Anda sedang meminta file.`;
 
 export function messagesToPrompt(messages = []) {
   const formatted = messages
