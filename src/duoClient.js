@@ -162,6 +162,8 @@ export class GitLabDuoClient {
     const lastUserMsgRaw = messages?.filter(m => m.role === "user").at(-1)?.content || prompt;
     const lastUserMsg = normalizeContent(lastUserMsgRaw);
 
+    const goalContent = hasAssistantMessage ? lastUserMsg : prompt;
+
     let created;
     if (messages && hasAssistantMessage && this.options.graphql?.workflowId) {
       const existingId = this.options.graphql.workflowId;
@@ -182,7 +184,7 @@ export class GitLabDuoClient {
       }
 
       created = await creator.createChatWorkflow({
-        goal: lastUserMsg,
+        goal: goalContent,
         modelIdentifier: this.options.modelIdentifier,
       });
 
@@ -204,7 +206,7 @@ export class GitLabDuoClient {
       console.error("[gitlab-duo:graphql] Sending message via aiAction...");
     }
 
-    const { requestId } = await creator.sendChatMessage({ content: lastUserMsg });
+    const { requestId } = await creator.sendChatMessage({ content: goalContent });
 
     if (this.options.debugFrames) {
       console.error("[gitlab-duo:graphql:aiAction] requestId:", requestId);
@@ -336,6 +338,8 @@ export class GitLabDuoClient {
     const lastUserMsg = normalizeContent(lastUserMsgRaw);
 
     const hasAssistantMessage = messages?.some(m => m.role === "assistant" || m.role === "agent");
+    const goalContent = hasAssistantMessage ? lastUserMsg : prompt;
+
     let created;
     if (messages && hasAssistantMessage && this.options.graphql?.workflowId) {
       const existingId = this.options.graphql.workflowId;
@@ -352,7 +356,7 @@ export class GitLabDuoClient {
       }
     } else {
       created = await creator.createChatWorkflow({
-        goal: lastUserMsg,
+        goal: goalContent,
         modelIdentifier: this.options.modelIdentifier,
       });
 
@@ -384,7 +388,7 @@ export class GitLabDuoClient {
 
     // Send startRequest frame to trigger agent execution
     const startFrames = protocol.buildStartFrames({
-      prompt: lastUserMsg,
+      prompt: goalContent,
       messages,
       conversationId: created.numericId,
     });
